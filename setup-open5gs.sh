@@ -6,23 +6,25 @@ set -e
 echo "Starting Open5GS setup with roaming configuration..."
 
 # Add entries to /etc/hosts
-echo "Adding required entries to /etc/hosts..."
-cat << EOF | sudo tee -a /etc/hosts
-127.0.1.10	nrf.5gc.mnc070.mcc999.3gppnetwork.org
-127.0.1.11	ausf.5gc.mnc070.mcc999.3gppnetwork.org
-127.0.1.12	udm.5gc.mnc070.mcc999.3gppnetwork.org
+echo "Overwriting /etc/hosts file..."
+cat << EOF | sudo tee /etc/hosts
+127.0.0.1       localhost
+127.0.1.1       open5gs-roaming.open5gs.virtualbox.org  open5gs-roaming
 
-127.0.2.10	nrf.5gc.mnc001.mcc001.3gppnetwork.org
-127.0.2.11	ausf.5gc.mnc001.mcc001.3gppnetwork.org
-127.0.2.12	udm.5gc.mnc001.mcc001.3gppnetwork.org
+# The following lines are desirable for IPv6 capable hosts
+::1     ip6-localhost ip6-loopback
+fe00::0 ip6-localnet
+ff00::0 ip6-mcastprefix
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters
 EOF
 
-echo "Entries added to /etc/hosts"
+echo "/etc/hosts file has been overwritten"
 
 echo "Starting Open5GS setup with roaming configuration..."
 
 # Navigate to the repository directory
-cd /home/vagrant/docker-open5gs
+cd /home/vagrant/open5gs-roaming
 
 # Make sure .env file is properly configured
 echo "Checking and updating .env file..."
@@ -39,58 +41,58 @@ echo "Using VM IP Address: $VM_IP"
 grep -q "DOCKER_HOST_IP=$VM_IP" .env || sed -i "s/DOCKER_HOST_IP=.*/DOCKER_HOST_IP=$VM_IP/" .env
 
 # Create and configure packetrusher.yaml
-echo "Creating packetrusher.yaml configuration..."
-mkdir -p configs/roaming
-cat > configs/roaming/packetrusher.yaml << 'EOF'
-gnodeb:
-  controlif:
-    ip: "gnb.packetrusher.org"
-    port: 38412
-  dataif:
-    ip: "gnb.packetrusher.org"
-    port: 2152
-  plmnlist:
-    mcc: "999"
-    mnc: "70"
-    tac: "000001"
-    gnbid: "000008"
-  slicesupportlist:
-    sst: "01"
-    sd: "000001"
+# echo "Creating packetrusher.yaml configuration..."
+# mkdir -p configs/roaming
+# cat > configs/roaming/packetrusher.yaml << 'EOF'
+# gnodeb:
+#   controlif:
+#     ip: "gnb.packetrusher.org"
+#     port: 38412
+#   dataif:
+#     ip: "gnb.packetrusher.org"
+#     port: 2152
+#   plmnlist:
+#     mcc: "999"
+#     mnc: "70"
+#     tac: "000001"
+#     gnbid: "000008"
+#   slicesupportlist:
+#     sst: "01"
+#     sd: "000001"
 
-ue:
-  hplmn:
-    mcc: "001"
-    mnc: "01"
-  msin: "1234567891"
-  key: "7F176C500D47CF2090CB6D91F4A73479"
-  opc: "3D45770E83C7BBB6900F3653FDA6330F"
-  dnn: "internet"
-  snssai:
-    sst: 01
-    sd: "000001"
-  amf: "8000"
-  sqn: "00000000"
-  routingindicator: "0000"
-  protectionScheme: 0
-  integrity:
-    nia0: false
-    nia1: false
-    nia2: true
-    nia3: false
-  ciphering:
-    nea0: true
-    nea1: false
-    nea2: true
-    nea3: false
+# ue:
+#   hplmn:
+#     mcc: "001"
+#     mnc: "01"
+#   msin: "1234567891"
+#   key: "7F176C500D47CF2090CB6D91F4A73479"
+#   opc: "3D45770E83C7BBB6900F3653FDA6330F"
+#   dnn: "internet"
+#   snssai:
+#     sst: 01
+#     sd: "000001"
+#   amf: "8000"
+#   sqn: "00000000"
+#   routingindicator: "0000"
+#   protectionScheme: 0
+#   integrity:
+#     nia0: false
+#     nia1: false
+#     nia2: true
+#     nia3: false
+#   ciphering:
+#     nea0: true
+#     nea1: false
+#     nea2: true
+#     nea3: false
 
-amfif:
-  - ip: "amf.5gc.mnc070.mcc999.3gppnetwork.org"
-    port: 38412
-logs:
-  level: 4
-EOF
-echo "packetrusher.yaml created successfully in configs/roaming/"
+# amfif:
+#   - ip: "amf.5gc.mnc070.mcc999.3gppnetwork.org"
+#     port: 38412
+# logs:
+#   level: 4
+# EOF
+# echo "packetrusher.yaml created successfully in configs/roaming/"
 
 echo "Building Open5GS using Docker Buildx Bake..."
 docker buildx bake
@@ -108,207 +110,75 @@ echo "Creating MongoDB script for adding the PacketRusher test UE..."
 
 cat > /home/vagrant/add-packetrusher-ue.js << 'EOF'
 // Add the PacketRusher test UE with IMSI 1234567891
-db.subscribers.insertOne(
-{
-    "_id": new ObjectId(),
-    "schema_version": NumberInt(1),
-    "imsi": "001011234567891",
-    "msisdn": [],
-    "imeisv": [],
-    "mme_host": [],
-    "mm_realm": [],
-    "purge_flag": [],
-    "slice":[
+db.subscribers.updateOne(
+    { imsi: "001011234567891" },
     {
-        "sst": NumberInt(1),
-        "default_indicator": true,
-        "session": [
-        {
-            "name" : "internet",
-            "type" : NumberInt(3),
-            "qos" :
-            { "index": NumberInt(9),
-                "arp":
-                {
-                    "priority_level" : NumberInt(8),
-                    "pre_emption_capability": NumberInt(1),
-                    "pre_emption_vulnerability": NumberInt(2)
-                }
-            },
-            "ambr":
+        $setOnInsert: {
+            "schema_version": NumberInt(1),
+            "imsi": "001011234567891",
+            "msisdn": [],
+            "imeisv": "1110000000000000",
+            "mme_host": [],
+            "mm_realm": [],
+            "purge_flag": [],
+            "slice":[
             {
-                "downlink":
+                "sst": NumberInt(1),
+                "sd": "000001",
+                "default_indicator": true,
+                "session": [
                 {
-                    "value": NumberInt(1000000000),
-                    "unit": NumberInt(0)
-                },
-                "uplink":
-                {
-                    "value": NumberInt(1000000000),
-                    "unit": NumberInt(0)
-                }
-            },
-            "pcc_rule": [],
-            "_id": new ObjectId(),
-        }],
-        "_id": new ObjectId(),
-    }],
-    "security":
-    {
-        "k" : "7F176C500D47CF2090CB6D91F4A73479",
-        "op" : null,
-        "opc" : "3D45770E83C7BBB6900F3653FDA6330F",
-        "amf" : "8000",
-    },
-    "ambr" :
-    {
-        "downlink" : { "value": NumberInt(1000000000), "unit": NumberInt(0)},
-        "uplink" : { "value": NumberInt(1000000000), "unit": NumberInt(0)}
-    },
-    "access_restriction_data": 32,
-    "network_access_mode": 0,
-    "subscriber_status": 0,
-    "operator_determined_barring": 0,
-    "subscribed_rau_tau_timer": 12,
-    "__v": 0
-}
-);
-EOF
-
-# Also create the Home Network and Visiting Network subscriber scripts for completeness
-cat > /home/vagrant/add-home-subscriber.js << 'EOF'
-db.subscribers.insertOne(
-{
-    "_id": new ObjectId(),
-    "schema_version": NumberInt(1),
-    "imsi": "001010000000001",
-    "msisdn": [],
-    "imeisv": [],
-    "mme_host": [],
-    "mm_realm": [],
-    "purge_flag": [],
-    "slice":[
-    {
-        "sst": NumberInt(1),
-        "default_indicator": true,
-        "session": [
-        {
-            "name" : "internet",
-            "type" : NumberInt(3),
-            "qos" :
-            { "index": NumberInt(9),
-                "arp":
-                {
-                    "priority_level" : NumberInt(8),
-                    "pre_emption_capability": NumberInt(1),
-                    "pre_emption_vulnerability": NumberInt(2)
-                }
-            },
-            "ambr":
+                    "name" : "internet",
+                    "type" : NumberInt(3),
+                    "qos" :
+                    { "index": NumberInt(9),
+                        "arp":
+                        {
+                            "priority_level" : NumberInt(8),
+                            "pre_emption_capability": NumberInt(1),
+                            "pre_emption_vulnerability": NumberInt(1)
+                        }
+                    },
+                    "ambr":
+                    {
+                        "downlink":
+                        {
+                            "value": NumberInt(1),
+                            "unit": NumberInt(3)
+                        },
+                        "uplink":
+                        {
+                            "value": NumberInt(1),
+                            "unit": NumberInt(3)
+                        }
+                    },
+                    "pcc_rule": [],
+                    "_id": new ObjectId(),
+                }],
+                "_id": new ObjectId(),
+            }],
+            "security":
             {
-                "downlink":
-                {
-                    "value": NumberInt(1000000000),
-                    "unit": NumberInt(0)
-                },
-                "uplink":
-                {
-                    "value": NumberInt(1000000000),
-                    "unit": NumberInt(0)
-                }
+                "k" : "7F176C500D47CF2090CB6D91F4A73479",
+                "op" : null,
+                "opc" : "3D45770E83C7BBB6900F3653FDA6330F",
+                "amf" : "8000",
+                "sqn" : NumberLong(1184)
             },
-            "pcc_rule": [],
-            "_id": new ObjectId(),
-        }],
-        "_id": new ObjectId(),
-    }],
-    "security":
-    {
-        "k" : "465B5CE8B199B49FAA5F0A2EE238A6BC",
-        "op" : null,
-        "opc" : "E8ED289DEBA952E4283B54E88E6183CA",
-        "amf" : "8000",
-    },
-    "ambr" :
-    {
-        "downlink" : { "value": NumberInt(1000000000), "unit": NumberInt(0)},
-        "uplink" : { "value": NumberInt(1000000000), "unit": NumberInt(0)}
-    },
-    "access_restriction_data": 32,
-    "network_access_mode": 0,
-    "subscriber_status": 0,
-    "operator_determined_barring": 0,
-    "subscribed_rau_tau_timer": 12,
-    "__v": 0
-}
-);
-EOF
-
-cat > /home/vagrant/add-visiting-subscriber.js << 'EOF'
-db.subscribers.insertOne(
-{
-    "_id": new ObjectId(),
-    "schema_version": NumberInt(1),
-    "imsi": "999700000000001",
-    "msisdn": [],
-    "imeisv": [],
-    "mme_host": [],
-    "mm_realm": [],
-    "purge_flag": [],
-    "slice":[
-    {
-        "sst": NumberInt(1),
-        "default_indicator": true,
-        "session": [
-        {
-            "name" : "internet",
-            "type" : NumberInt(3),
-            "qos" :
-            { "index": NumberInt(9),
-                "arp":
-                {
-                    "priority_level" : NumberInt(8),
-                    "pre_emption_capability": NumberInt(1),
-                    "pre_emption_vulnerability": NumberInt(2)
-                }
-            },
-            "ambr":
+            "ambr" :
             {
-                "downlink":
-                {
-                    "value": NumberInt(1000000000),
-                    "unit": NumberInt(0)
-                },
-                "uplink":
-                {
-                    "value": NumberInt(1000000000),
-                    "unit": NumberInt(0)
-                }
+                "downlink" : { "value": NumberInt(1), "unit": NumberInt(3)},
+                "uplink" : { "value": NumberInt(1), "unit": NumberInt(3)}
             },
-            "pcc_rule": [],
-            "_id": new ObjectId(),
-        }],
-        "_id": new ObjectId(),
-    }],
-    "security":
-    {
-        "k" : "465B5CE8B199B49FAA5F0A2EE238A6BC",
-        "op" : null,
-        "opc" : "E8ED289DEBA952E4283B54E88E6183CA",
-        "amf" : "8000",
+            "access_restriction_data": 32,
+            "network_access_mode": 2,
+            "subscriber_status": 0,
+            "operator_determined_barring": 0,
+            "subscribed_rau_tau_timer": 12,
+            "__v": 0
+        }
     },
-    "ambr" :
-    {
-        "downlink" : { "value": NumberInt(1000000000), "unit": NumberInt(0)},
-        "uplink" : { "value": NumberInt(1000000000), "unit": NumberInt(0)}
-    },
-    "access_restriction_data": 32,
-    "network_access_mode": 0,
-    "subscriber_status": 0,
-    "operator_determined_barring": 0,
-    "subscribed_rau_tau_timer": 12,
-    "__v": 0
-}
+    { upsert: true }
 );
 EOF
 
@@ -328,14 +198,6 @@ if docker exec db which mongo &>/dev/null; then
   # Add the PacketRusher test UE (IMSI 1234567891)
   echo "Adding PacketRusher test UE with IMSI 1234567891..."
   docker exec -i db mongo --quiet mongodb://localhost:27017/open5gs < /home/vagrant/add-packetrusher-ue.js
-  
-  # Add Home Network subscriber (MCC 001, MNC 001)
-  echo "Adding Home Network subscriber (MCC 001, MNC 001)..."
-  docker exec -i db mongo --quiet mongodb://localhost:27017/open5gs < /home/vagrant/add-home-subscriber.js
-  
-  # Add Visiting Network subscriber (MCC 999, MNC 070)
-  echo "Adding Visiting Network subscriber (MCC 999, MNC 070)..."
-  docker exec -i db mongo --quiet mongodb://localhost:27017/open5gs < /home/vagrant/add-visiting-subscriber.js
   
   # Verify subscribers were added
   echo "Verifying subscribers in the database:"
@@ -382,70 +244,73 @@ OPC=$3
 # Create temporary MongoDB script
 cat > /tmp/add-sub.js << EOL
 use open5gs;
-db.subscribers.insertOne(
-{
-    "_id": new ObjectId(),
-    "schema_version": NumberInt(1),
-    "imsi": "${IMSI}",
-    "msisdn": [],
-    "imeisv": [],
-    "mme_host": [],
-    "mm_realm": [],
-    "purge_flag": [],
-    "slice":[
+db.subscribers.updateOne(
+    { imsi: "${IMSI}" },
     {
-        "sst": NumberInt(1),
-        "default_indicator": true,
-        "session": [
-        {
-            "name" : "internet",
-            "type" : NumberInt(3),
-            "qos" :
-            { "index": NumberInt(9),
-                "arp":
-                {
-                    "priority_level" : NumberInt(8),
-                    "pre_emption_capability": NumberInt(1),
-                    "pre_emption_vulnerability": NumberInt(2)
-                }
-            },
-            "ambr":
+        \$setOnInsert: {
+            "schema_version": NumberInt(1),
+            "imsi": "${IMSI}",
+            "msisdn": [],
+            "imeisv": [],
+            "mme_host": [],
+            "mm_realm": [],
+            "purge_flag": [],
+            "slice":[
             {
-                "downlink":
+                "sst": NumberInt(1),
+                "default_indicator": true,
+                "session": [
                 {
-                    "value": NumberInt(1000000000),
-                    "unit": NumberInt(0)
-                },
-                "uplink":
-                {
-                    "value": NumberInt(1000000000),
-                    "unit": NumberInt(0)
-                }
+                    "name" : "internet",
+                    "type" : NumberInt(3),
+                    "qos" :
+                    { "index": NumberInt(9),
+                        "arp":
+                        {
+                            "priority_level" : NumberInt(8),
+                            "pre_emption_capability": NumberInt(1),
+                            "pre_emption_vulnerability": NumberInt(2)
+                        }
+                    },
+                    "ambr":
+                    {
+                        "downlink":
+                        {
+                            "value": NumberInt(1000000000),
+                            "unit": NumberInt(0)
+                        },
+                        "uplink":
+                        {
+                            "value": NumberInt(1000000000),
+                            "unit": NumberInt(0)
+                        }
+                    },
+                    "pcc_rule": [],
+                    "_id": new ObjectId(),
+                }],
+                "_id": new ObjectId(),
+            }],
+            "security":
+            {
+                "k" : "${KEY}",
+                "op" : null,
+                "opc" : "${OPC}",
+                "amf" : "8000",
             },
-            "pcc_rule": [],
-            "_id": new ObjectId(),
-        }],
-        "_id": new ObjectId(),
-    }],
-    "security":
-    {
-        "k" : "${KEY}",
-        "op" : null,
-        "opc" : "${OPC}",
-        "amf" : "8000",
+            "ambr" :
+            {
+                "downlink" : { "value": NumberInt(1000000000), "unit": NumberInt(0)},
+                "uplink" : { "value": NumberInt(1000000000), "unit": NumberInt(0)}
+            },
+            "access_restriction_data": 32,
+            "network_access_mode": 0,
+            "subscriber_status": 0,
+            "operator_determined_barring": 0,
+            "subscribed_rau_tau_timer": 12,
+            "__v": 0
+        }
     },
-    "ambr" :
-    {
-        "downlink" : { "value": NumberInt(1000000000), "unit": NumberInt(0)},
-        "uplink" : { "value": NumberInt(1000000000), "unit": NumberInt(0)}
-    },
-    "access_restriction_data": 32,
-    "network_access_mode": 0,
-    "subscriber_status": 0,
-    "operator_determined_barring": 0,
-    "subscribed_rau_tau_timer": 12,
-    "__v": 0
-}
+    { upsert: true }
 );
 EOL
 
@@ -458,7 +323,7 @@ else
   docker exec db mongo < /tmp/add-sub.js
 fi
 
-echo "Subscriber ${IMSI} added successfully"
+echo "Subscriber ${IMSI} added or updated successfully"
 EOF
 
 chmod +x /home/vagrant/add-subscriber.sh

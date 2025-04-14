@@ -50,15 +50,15 @@ Vagrant.configure("2") do |config|
       
       # Clone the repository
       cd /home/vagrant
-      git clone https://github.com/Borjis131/docker-open5gs.git
-      chown -R vagrant:vagrant docker-open5gs
+      git clone https://github.com/roastedbeans/open5gs-roaming.git
+      chown -R vagrant:vagrant open5gs-roaming
       
       # Get the VM IP address
-      VM_IP=$(ip -4 addr show eth1 | grep -oP 'inet \K[\d.]+')
+      VM_IP=$(ip -4 addr show enp0s3 | grep -oP 'inet \K[\d.]+')
       echo "VM IP Address: $VM_IP"
       
       # Update the .env file
-      cd /home/vagrant/docker-open5gs
+      cd /home/vagrant/open5gs-roaming
       sed -i "s/MONGODB_VERSION=.*/MONGODB_VERSION=4.4/" .env
       sed -i "s/DOCKER_HOST_IP=.*/DOCKER_HOST_IP=$VM_IP/" .env
       
