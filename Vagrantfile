@@ -54,7 +54,7 @@ Vagrant.configure("2") do |config|
       chown -R vagrant:vagrant open5gs-roaming
       
       # Get the VM IP address
-      VM_IP=$(ip -4 addr show enp0s3 | grep -oP 'inet \K[\d.]+')
+      VM_IP=$(ip -4 addr show enp0s8 | grep -oP 'inet \K[\d.]+')
       echo "VM IP Address: $VM_IP"
       
       # Update the .env file

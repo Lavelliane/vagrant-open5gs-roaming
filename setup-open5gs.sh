@@ -33,66 +33,12 @@ grep -q "MONGODB_VERSION=4.4" .env || sed -i "s/MONGODB_VERSION=.*/MONGODB_VERSI
 
 # Get the VM IP address and update DOCKER_HOST_IP
 # Find the correct network interface (might be enp0s8 in Ubuntu or other)
-PRIMARY_INTERFACE="enp0s3"
+PRIMARY_INTERFACE="enp0s8"
 VM_IP=$(ip -4 addr show $PRIMARY_INTERFACE | grep -oP 'inet \K[\d.]+')
 
 echo "Using specific interface: $PRIMARY_INTERFACE"
 echo "Using VM IP Address: $VM_IP"
 grep -q "DOCKER_HOST_IP=$VM_IP" .env || sed -i "s/DOCKER_HOST_IP=.*/DOCKER_HOST_IP=$VM_IP/" .env
-
-# Create and configure packetrusher.yaml
-# echo "Creating packetrusher.yaml configuration..."
-# mkdir -p configs/roaming
-# cat > configs/roaming/packetrusher.yaml << 'EOF'
-# gnodeb:
-#   controlif:
-#     ip: "gnb.packetrusher.org"
-#     port: 38412
-#   dataif:
-#     ip: "gnb.packetrusher.org"
-#     port: 2152
-#   plmnlist:
-#     mcc: "999"
-#     mnc: "70"
-#     tac: "000001"
-#     gnbid: "000008"
-#   slicesupportlist:
-#     sst: "01"
-#     sd: "000001"
-
-# ue:
-#   hplmn:
-#     mcc: "001"
-#     mnc: "01"
-#   msin: "1234567891"
-#   key: "7F176C500D47CF2090CB6D91F4A73479"
-#   opc: "3D45770E83C7BBB6900F3653FDA6330F"
-#   dnn: "internet"
-#   snssai:
-#     sst: 01
-#     sd: "000001"
-#   amf: "8000"
-#   sqn: "00000000"
-#   routingindicator: "0000"
-#   protectionScheme: 0
-#   integrity:
-#     nia0: false
-#     nia1: false
-#     nia2: true
-#     nia3: false
-#   ciphering:
-#     nea0: true
-#     nea1: false
-#     nea2: true
-#     nea3: false
-
-# amfif:
-#   - ip: "amf.5gc.mnc070.mcc999.3gppnetwork.org"
-#     port: 38412
-# logs:
-#   level: 4
-# EOF
-# echo "packetrusher.yaml created successfully in configs/roaming/"
 
 echo "Building Open5GS using Docker Buildx Bake..."
 docker buildx bake
