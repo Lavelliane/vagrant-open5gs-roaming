@@ -26,7 +26,7 @@ Vagrant.configure("2") do |config|
       apt-get update
       
       # Install Docker and other dependencies
-      apt-get install -y apt-transport-https ca-certificates curl software-properties-common git make
+      apt-get install -y apt-transport-https ca-certificates curl software-properties-common git make gnupg lsb-release
   
       # Add Docker's official GPG key
       curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
@@ -35,8 +35,8 @@ Vagrant.configure("2") do |config|
       echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
       
       # Install Docker
-      apt-get update
-      apt-get install -y docker-ce docker-ce-cli containerd.io
+      apt-get update --fix-missing
+      apt-get install -y docker-ce docker-ce-cli containerd.iochm
       
       # Install Docker Compose
       curl -L "https://github.com/docker/compose/releases/download/v2.20.3/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
