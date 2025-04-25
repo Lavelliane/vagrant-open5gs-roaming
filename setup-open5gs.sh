@@ -24,7 +24,9 @@ echo "/etc/hosts file has been overwritten"
 echo "Starting Open5GS setup with roaming configuration..."
 
 # Navigate to the repository directory
-cd /home/vagrant/open5gs-roaming
+# Set the repository directory as an environment variable
+REPO_DIR="/home/vagrant/open5gs-roaming"
+cd $REPO_DIR
 
 # Make sure .env file is properly configured
 echo "Checking and updating .env file..."

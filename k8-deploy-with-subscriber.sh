@@ -49,22 +49,81 @@ microk8s kubectl create namespace $NAMESPACE --dry-run=client -o yaml | microk8s
 echo -e "${GREEN}Namespace ready${NC}"
 echo "----------------------------------------"
 
-# Step 1: Deploy only MongoDB first
-echo -e "${BLUE}Deploying MongoDB...${NC}"
-if [ -f "shared/mongodb/deployment.yaml" ]; then
-    echo -e "Applying MongoDB deployment..."
-    microk8s kubectl apply -f shared/mongodb/deployment.yaml -n $NAMESPACE
-else
-    echo -e "${RED}Error: MongoDB deployment file not found${NC}"
-    exit 1
-fi
+# Step 1: Deploy MongoDB using StatefulSet
+echo -e "${BLUE}Deploying MongoDB StatefulSet...${NC}"
 
+# Create MongoDB StatefulSet YAML
+cat > /tmp/mongodb-statefulset.yaml << EOF
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongodb
+  namespace: $NAMESPACE
+spec:
+  serviceName: mongodb
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongodb
+  template:
+    metadata:
+      labels:
+        app: mongodb
+    spec:
+      containers:
+        - name: mongodb
+          image: mongo:4.4
+          command: ["mongod", "--bind_ip", "0.0.0.0", "--port", "27017"]
+          ports:
+            - containerPort: 27017
+          volumeMounts:
+            - name: db-data
+              mountPath: /data/db
+            - name: db-config
+              mountPath: /data/configdb
+  volumeClaimTemplates:
+    - metadata:
+        name: db-data
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 1Gi
+    - metadata:
+        name: db-config
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 500Mi
+EOF
+
+# Apply MongoDB StatefulSet
+echo -e "Applying MongoDB StatefulSet..."
+microk8s kubectl apply -f /tmp/mongodb-statefulset.yaml -n $NAMESPACE
+
+# Check if service.yaml exists in shared/mongodb directory
 if [ -f "shared/mongodb/service.yaml" ]; then
     echo -e "Applying MongoDB service..."
     microk8s kubectl apply -f shared/mongodb/service.yaml -n $NAMESPACE
 else
-    echo -e "${RED}Error: MongoDB service file not found${NC}"
-    exit 1
+    # Create MongoDB service YAML if doesn't exist
+    cat > /tmp/mongodb-service.yaml << EOF
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb
+  namespace: $NAMESPACE
+spec:
+  selector:
+    app: mongodb
+  ports:
+  - port: 27017
+    targetPort: 27017
+  clusterIP: None
+EOF
+    echo -e "Applying MongoDB service..."
+    microk8s kubectl apply -f /tmp/mongodb-service.yaml -n $NAMESPACE
 fi
 
 # Wait for MongoDB to be ready
