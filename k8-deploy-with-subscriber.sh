@@ -1,6 +1,7 @@
 #!/bin/bash
 
-# Script to deploy MongoDB first, add subscribers, then deploy other components
+# Ordered 5G Core Network Deployment Script
+# This script deploys the components of a 5G core network in the proper hierarchical order
 # Exit on error
 set -e
 
@@ -8,6 +9,7 @@ set -e
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 RED='\033[0;31m'
+YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Default subscriber values
@@ -49,7 +51,7 @@ microk8s kubectl create namespace $NAMESPACE --dry-run=client -o yaml | microk8s
 echo -e "${GREEN}Namespace ready${NC}"
 echo "----------------------------------------"
 
-# Step 1: Deploy MongoDB using StatefulSet
+# Step 1: Deploy MongoDB using StatefulSet (Shared data store)
 echo -e "${BLUE}Deploying MongoDB StatefulSet...${NC}"
 
 # Create MongoDB StatefulSet YAML
@@ -267,64 +269,82 @@ microk8s kubectl exec -n $NAMESPACE $MONGODB_POD -- mongo --quiet /tmp/verify-su
 echo -e "${GREEN}Subscriber addition completed${NC}"
 echo "----------------------------------------"
 
-# Step 3: Deploy remaining components
-
 # Function to deploy components from a directory
 deploy_components() {
     local dir=$1
-    local has_configmap=${2:-true}
+    local component_name=$(basename "$dir")
+    local prefix=$2
     
-    echo -e "${BLUE}Deploying components from $dir...${NC}"
+    echo -e "${BLUE}Deploying $prefix $component_name...${NC}"
     
     # Change to the directory
     cd "$dir"
     
-    # Apply configmap if it exists and has_configmap is true
-    if [ "$has_configmap" = true ] && [ -f "configmap.yaml" ]; then
-        echo -e "Applying configmap for $dir..."
+    # Apply configmap if it exists
+    if [ -f "configmap.yaml" ]; then
+        echo -e "Applying configmap for $prefix $component_name..."
         microk8s kubectl apply -f configmap.yaml -n $NAMESPACE
     fi
     
     # Apply deployment
     if [ -f "deployment.yaml" ]; then
-        echo -e "Applying deployment for $dir..."
+        echo -e "Applying deployment for $prefix $component_name..."
         microk8s kubectl apply -f deployment.yaml -n $NAMESPACE
     else
-        echo -e "${RED}Warning: No deployment.yaml found in $dir${NC}"
+        echo -e "${RED}Warning: No deployment.yaml found for $prefix $component_name${NC}"
     fi
     
     # Apply service
     if [ -f "service.yaml" ]; then
-        echo -e "Applying service for $dir..."
+        echo -e "Applying service for $prefix $component_name..."
         microk8s kubectl apply -f service.yaml -n $NAMESPACE
     else
-        echo -e "${RED}Warning: No service.yaml found in $dir${NC}"
+        echo -e "${RED}Warning: No service.yaml found for $prefix $component_name${NC}"
     fi
     
-    echo -e "${GREEN}Finished deploying $dir${NC}"
+    echo -e "${GREEN}Finished deploying $prefix $component_name${NC}"
     echo "----------------------------------------"
     
     # Return to original directory
     cd - > /dev/null
 }
 
-# Deploy home directory components
-echo -e "${BLUE}Deploying components from the home directory...${NC}"
-HOME_COMPONENTS=("ausf" "nrf" "sepp" "udm" "udr")
-for component in "${HOME_COMPONENTS[@]}"; do
-    deploy_components "home/$component"
-done
+# Step 3: Deploy Network Functions in logical order
 
-# Deploy packetrusher
-echo -e "${BLUE}Deploying packetrusher...${NC}"
-deploy_components "shared/packetrusher"
+# Deploy NRF first (Network Repository Function - the service registry)
+echo -e "${YELLOW}[1/4] Deploying NRF components (Service Registry)...${NC}"
+deploy_components "home/nrf" "Home"
+deploy_components "visiting/nrf" "Visiting"
+echo -e "${GREEN}NRF components deployed successfully${NC}"
 
-# Deploy visiting directory components
-echo -e "${BLUE}Deploying components from the visiting directory...${NC}"
-VISITING_COMPONENTS=("amf" "ausf" "bsf" "nrf" "nssf" "pcf" "sepp" "smf" "upf")
-for component in "${VISITING_COMPONENTS[@]}"; do
-    deploy_components "visiting/$component"
-done
+# Deploy UDR/UDM/AUSF (User data management and authentication)
+echo -e "${YELLOW}[2/4] Deploying Subscriber Data Management components...${NC}"
+deploy_components "home/udr" "Home"
+deploy_components "home/udm" "Home"
+deploy_components "home/ausf" "Home"
+deploy_components "visiting/ausf" "Visiting"
+echo -e "${GREEN}Subscriber Data Management components deployed successfully${NC}"
+
+# Deploy Core Network Functions
+echo -e "${YELLOW}[3/4] Deploying Core Network Functions...${NC}"
+deploy_components "visiting/nssf" "Visiting"
+deploy_components "visiting/bsf" "Visiting"
+deploy_components "visiting/pcf" "Visiting"
+deploy_components "home/sepp" "Home"
+deploy_components "visiting/sepp" "Visiting"
+echo -e "${GREEN}Core Network Functions deployed successfully${NC}"
+
+# Deploy User Plane and Mobility Functions (SMF, UPF, AMF)
+echo -e "${YELLOW}[4/4] Deploying User Plane and Mobility Management components...${NC}"
+deploy_components "visiting/smf" "Visiting"
+deploy_components "visiting/upf" "Visiting"
+deploy_components "visiting/amf" "Visiting"
+echo -e "${GREEN}User Plane and Mobility Management components deployed successfully${NC}"
+
+# Deploy PacketRusher (simulated User Equipment)
+echo -e "${YELLOW}Deploying PacketRusher (UE simulator)...${NC}"
+deploy_components "shared/packetrusher" "Shared"
+echo -e "${GREEN}PacketRusher deployed successfully${NC}"
 
 # Wait for all pods to be ready
 echo -e "${BLUE}Waiting for all pods to be ready...${NC}"
@@ -344,4 +364,4 @@ microk8s kubectl get deployments -n $NAMESPACE
 echo "----------------------------------------"
 
 echo -e "${GREEN}Deployment complete with subscriber IMSI: $IMSI added to MongoDB${NC}"
-echo -e "${GREEN}To add more subscribers, use the add-k8s-subscriber.sh script${NC}" 
+echo -e "${BLUE}To add more subscribers, use the add-k8s-subscriber.sh script${NC}"
