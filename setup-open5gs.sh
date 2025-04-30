@@ -205,7 +205,8 @@ db.subscribers.updateOne(
             "purge_flag": [],
             "slice":[
             {
-                "sst": NumberInt(1),
+                "sst": 1,
+                "sd": "000001",
                 "default_indicator": true,
                 "session": [
                 {

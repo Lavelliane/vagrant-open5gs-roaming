@@ -36,7 +36,7 @@ Vagrant.configure("2") do |config|
       
       # Install Docker
       apt-get update --fix-missing
-      apt-get install -y docker-ce docker-ce-cli containerd.iochm
+      apt-get install -y docker-ce docker-ce-cli containerd.io
       
       # Install Docker Compose
       curl -L "https://github.com/docker/compose/releases/download/v2.20.3/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
