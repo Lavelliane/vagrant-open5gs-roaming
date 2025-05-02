@@ -51,6 +51,15 @@ microk8s kubectl create namespace $NAMESPACE --dry-run=client -o yaml | microk8s
 echo -e "${GREEN}Namespace ready${NC}"
 echo "----------------------------------------"
 
+# Add this near the beginning, after namespace creation
+echo -e "${BLUE}Checking if storage is enabled in microk8s...${NC}"
+if ! microk8s status | grep -q "storage: enabled"; then
+  echo -e "${YELLOW}Storage not enabled. Enabling now...${NC}"
+  microk8s enable storage
+  sleep 10  # Give it time to initialize
+fi
+echo -e "${GREEN}Storage ready${NC}"
+
 # Step 1: Deploy MongoDB using StatefulSet (Shared data store)
 echo -e "${BLUE}Deploying MongoDB StatefulSet...${NC}"
 
@@ -131,6 +140,10 @@ fi
 # Wait for MongoDB to be ready
 echo -e "${BLUE}Waiting for MongoDB pod to be ready...${NC}"
 microk8s kubectl wait --for=condition=ready pods -l app=mongodb -n $NAMESPACE --timeout=180s
+
+# Add after MongoDB pod is ready, before adding subscriber
+echo -e "${BLUE}Waiting for MongoDB to fully initialize...${NC}"
+sleep 15  # Give MongoDB time to start accepting connections
 
 # Find MongoDB pod
 echo -e "${BLUE}Finding MongoDB pod...${NC}"
@@ -325,6 +338,7 @@ deploy_components "home/ausf" "Home"
 deploy_components "visiting/ausf" "Visiting"
 echo -e "${GREEN}Subscriber Data Management components deployed successfully${NC}"
 
+
 # Deploy Core Network Functions
 echo -e "${YELLOW}[3/4] Deploying Core Network Functions...${NC}"
 deploy_components "visiting/nssf" "Visiting"
@@ -333,6 +347,13 @@ deploy_components "visiting/pcf" "Visiting"
 deploy_components "home/sepp" "Home"
 deploy_components "visiting/sepp" "Visiting"
 echo -e "${GREEN}Core Network Functions deployed successfully${NC}"
+
+# Add after both SEPPs are deployed
+echo -e "${BLUE}Verifying SEPP certificate volumes...${NC}"
+microk8s kubectl get pvc -n $NAMESPACE | grep -E "h-sepp-certs|v-sepp-certs"
+if [ $? -ne 0 ]; then
+  echo -e "${YELLOW}Warning: SEPP certificate volumes may not be properly provisioned${NC}"
+fi
 
 # Deploy User Plane and Mobility Functions (SMF, UPF, AMF)
 echo -e "${YELLOW}[4/4] Deploying User Plane and Mobility Management components...${NC}"
@@ -345,6 +366,10 @@ echo -e "${GREEN}User Plane and Mobility Management components deployed successf
 echo -e "${YELLOW}Deploying PacketRusher (UE simulator)...${NC}"
 deploy_components "shared/packetrusher" "Shared"
 echo -e "${GREEN}PacketRusher deployed successfully${NC}"
+
+# Add after all components are deployed
+echo -e "${BLUE}Giving PacketRusher extra time to initialize...${NC}"
+sleep 20
 
 # Wait for all pods to be ready
 echo -e "${BLUE}Waiting for all pods to be ready...${NC}"
@@ -362,6 +387,11 @@ echo "----------------------------------------"
 echo "Deployments:"
 microk8s kubectl get deployments -n $NAMESPACE
 echo "----------------------------------------"
+
+# Add at the end before final message
+echo -e "${BLUE}Testing network connectivity between components...${NC}"
+AMF_POD=$(microk8s kubectl get pods -n $NAMESPACE -l app=v-amf -o jsonpath='{.items[0].metadata.name}')
+microk8s kubectl exec -n $NAMESPACE $AMF_POD -- ping -c 2 v-nrf.open5gs.svc.cluster.local || echo "Connectivity issues detected"
 
 echo -e "${GREEN}Deployment complete with subscriber IMSI: $IMSI added to MongoDB${NC}"
 echo -e "${BLUE}To add more subscribers, use the add-k8s-subscriber.sh script${NC}"
